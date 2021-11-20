@@ -1,0 +1,76 @@
+trigger:
+- main
+
+# Para saber mais sobre o kcat/kafkacat acesse os links:
+# https://github.com/edenhill/kcat
+# https://docs.confluent.io/platform/current/app-development/kafkacat-usage.html
+
+# É necessário que na raiz do repositório exista um arquivo README.MD com múltiplas
+# linhas (ao menos 3).
+
+resources:
+  containers:
+    - container: zookeeper
+      image: confluentinc/cp-zookeeper:latest
+      networks: 
+        - testes
+      env:
+        ZOOKEEPER_CLIENT_PORT: 2181
+        ZOOKEEPER_TICK_TIME: 2000
+      ports:
+        - 2181:2181 
+    - container: kafka
+      image: confluentinc/cp-kafka:latest
+      networks: 
+        - testes
+      depends_on:
+        - zookeeper
+      env:
+        KAFKA_BROKER_ID: 1
+        KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+        KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+        KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+        KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+        KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      ports:
+        - 9092:9092
+
+variables:
+
+  # Agent VM image name
+  vmImageName: 'ubuntu-latest'
+  
+  # Testes com o Apache Kafka
+  topicTestes: 'topic-testes'
+  brokerKafka: 'localhost:9092'
+
+stages:
+- stage: Tests
+  displayName: Tests stage
+  jobs:
+  - job: Testes
+    displayName: Testes com Resources/Containers
+    pool:
+      vmImage: $(vmImageName)
+    services:
+      zookeeper: zookeeper
+      kafka: kafka
+    steps:
+    - script: docker container ls
+      displayName: Exibir containers em execução
+    - script: |
+        #sudo snap install kafkactl
+        #kafkactl
+        sudo apt-get install kafkacat
+        kafkacat -h
+      displayName: Instalar o kcat/kafkacat
+    - script: |
+        echo 'Mensagens enviadas (assumindo a quebra de linha como separador no README.md):'
+        kafkacat -b $(brokerKafka) -t $(topicTestes) -T -P -l README.md
+      displayName: Criar tópico e enviar mensagens
+    - script: kafkacat -L -b $(brokerKafka)
+      displayName: Exibir tópicos existentes
+    - script: kafkacat -b $(brokerKafka) -t $(topicTestes) -C -e
+      displayName: Exibir todas as mensagens
+    - script: kafkacat -b $(brokerKafka) -t $(topicTestes) -C -o 2 -e
+      displayName: Ler as últimas mensagens ignorando as 2 primeiras
